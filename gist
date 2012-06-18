@@ -45,6 +45,7 @@ sub create($$$) {
   }));
 
   my $response = $agent->request($request);
+  die "Incorrect username/password\n" if $response->code == 401;
   die "Failed to create gist\n" unless $response->is_success;
 
   my $url = decode_json($response->content)->{git_push_url};
@@ -68,6 +69,7 @@ sub describe($$) {
   $request->content(encode_json({ description => $description }));
 
   my $response = $agent->request($request);
+  die "Incorrect username/password\n" if $response->code == 401;
   die "Gist $id not found\n" unless $response->is_success;
   exit 0;
 }
@@ -84,6 +86,7 @@ sub destroy(@) {
     $request->authorization_basic($username, $password);
 
     my $response = $agent->request($request);
+    die "Incorrect username/password\n" if $response->code == 401;
     die "Gist $id not found\n" unless $response->is_success;
   }
   exit 0;
@@ -94,7 +97,8 @@ sub list() {
   $request->authorization_basic($username, $password);
 
   my $response = $agent->request($request);
-  die "Failed to list gists\n" unless $response->is_success;
+  die "Incorrect username/password\n" if $response->code == 401;
+  die "Failed to access gists\n" unless $response->is_success;
 
   my @gists = sort {
     length $a->{id} <=> length $b->{id} or $a->{id} cmp $b->{id}
