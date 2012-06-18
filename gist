@@ -73,16 +73,19 @@ sub describe($$) {
 }
 
 
-sub destroy($) {
-  my $id = shift;
-  die "Invalid gist ID '$id'\n"
-    unless $id =~ /^\d+$/ or $id =~ /^[0-9a-f]{20}$/;
+sub destroy(@) {
+  foreach my $id (@_) {
+    die "Invalid gist ID '$id'\n"
+      unless $id =~ /^\d+$/ or $id =~ /^[0-9a-f]{20}$/;
+  }
 
-  my $request = HTTP::Request->new(DELETE => "$gistapi/$id");
-  $request->authorization_basic($username, $password);
+  foreach my $id (@_) {
+    my $request = HTTP::Request->new(DELETE => "$gistapi/$id");
+    $request->authorization_basic($username, $password);
 
-  my $response = $agent->request($request);
-  die "Gist $id not found\n" unless $response->is_success;
+    my $response = $agent->request($request);
+    die "Gist $id not found\n" unless $response->is_success;
+  }
   exit 0;
 }
 
@@ -107,7 +110,8 @@ list if @ARGV == 0 or (@ARGV == 1 and $ARGV[0] =~ /^list|ls$/);
 clone $ARGV[1], undef if @ARGV == 2 and $ARGV[0] eq 'clone';
 clone $ARGV[1], $ARGV[2] if @ARGV == 3 and $ARGV[0] eq 'clone';
 describe $ARGV[1], $ARGV[2] if @ARGV == 3 and $ARGV[0] eq 'describe';
-destroy $ARGV[1] if @ARGV == 2 and $ARGV[0] =~ /^(delete|destroy|rm)$/;
+destroy @ARGV[1 .. $#ARGV]
+  if @ARGV >= 1 and $ARGV[0] =~ /^(delete|destroy|rm)$/;
 create $ARGV[0], $ARGV[1], undef
   if @ARGV == 2 and $ARGV[0] =~ /^(public|private)$/;
 create $ARGV[0], $ARGV[1], $ARGV[2]
@@ -117,7 +121,7 @@ $0 = basename $0;
 print STDERR <<EOF;
 Usage: $0 [list]                list all gists
        $0 clone ID [DIR]        clone an existing gist
-       $0 delete ID             delete an existing gist
+       $0 delete [ID]...        delete existing gists
        $0 describe ID DESC      update description of an existing gist
        $0 private DESC [DIR]    create and clone a new private gist
        $0 public DESC [DIR]     create and clone a new public gist
