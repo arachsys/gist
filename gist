@@ -1,0 +1,116 @@
+#!/bin/perl -w
+
+use File::Basename;
+use JSON::PP;
+use LWP::UserAgent;
+use strict;
+
+my $agent = LWP::UserAgent->new;
+my $gistapi = 'https://api.github.com/gists';
+
+my $username = `git config --get github.user 2>/dev/null`
+  or die "github.user not set in git-config\n";
+my $password = `git config --get github.pass 2>/dev/null`
+  or die "github.pass not set in git-config\n";
+chomp $username;
+chomp $password;
+
+sub clone($) {
+  die "Invalid gist ID '$_[0]'"
+    unless $_[0] =~ /^\d+$/ or $_[0] =~ /^[0-9a-f]{20}$/;
+  exec 'git', 'clone', "git\@gist.github.com:$_[0].git";
+  die "Failed to clone gist\n";
+}
+
+sub create($$) {
+  my ($public, $description) = @_;
+
+  my $request = HTTP::Request->new(POST => $gistapi);
+  $request->authorization_basic($username, $password);
+  $request->content_type('application/json');
+  $request->content(encode_json({
+    description => $description,
+    public => $public eq 'public' ? JSON::PP::true : JSON::PP::false,
+    files => {
+      README => {
+        content => $description
+      }
+    }
+  }));
+
+  my $response = $agent->request($request);
+  die "Failed to create gist\n" unless $response->is_success;
+
+  exec 'git', 'clone', decode_json($response->content)->{git_push_url};
+  die "Failed to clone gist\n";
+}
+
+sub describe($$) {
+  my ($id, $description) = @_;
+  die "Invalid gist ID '$id'\n"
+    unless $id =~ /^\d+$/ or $id =~ /^[0-9a-f]{20}$/;
+
+  my $request = HTTP::Request->new(PATCH => "$gistapi/$id");
+  $request->authorization_basic($username, $password);
+  $request->content_type('application/json');
+  $request->content(encode_json({ description => $description }));
+
+  my $response = $agent->request($request);
+  die "Gist $id not found\n" unless $response->is_success;
+  exit 0;
+}
+
+
+sub destroy($) {
+  my $id = shift;
+  die "Invalid gist ID '$id'\n"
+    unless $id =~ /^\d+$/ or $id =~ /^[0-9a-f]{20}$/;
+
+  my $request = HTTP::Request->new(DELETE => "$gistapi/$id");
+  $request->authorization_basic($username, $password);
+
+  my $response = $agent->request($request);
+  die "Gist $id not found\n" unless $response->is_success;
+  exit 0;
+}
+
+sub list() {
+  my $request = HTTP::Request->new(GET => $gistapi);
+  $request->authorization_basic($username, $password);
+
+  my $response = $agent->request($request);
+  die "Failed to list gists\n" unless $response->is_success;
+
+  my @gists = sort {
+    length $a->{id} <=> length $b->{id} or $a->{id} cmp $b->{id}
+  } @{decode_json $response->content};
+
+  foreach my $gist (@gists) {
+    printf "%-22s%s\n", $gist->{id}, $gist->{description};
+  }
+  exit 0;
+}
+
+list if @ARGV == 0 or (@ARGV == 1 and $ARGV[0] =~ /^list|ls$/);
+clone $ARGV[1] if @ARGV == 2 and $ARGV[0] eq 'clone';
+describe $ARGV[1], $ARGV[2] if @ARGV == 3 and $ARGV[0] eq 'describe';
+destroy $ARGV[1] if @ARGV == 2 and $ARGV[0] =~ /^(delete|destroy|rm)$/;
+create $ARGV[0], $ARGV[1] if @ARGV == 2 and $ARGV[0] =~ /^(public|private)$/;
+
+$0 = basename $0;
+print STDERR <<EOF;
+Usage: $0 [list]            list all gists
+       $0 clone ID          clone an existing gist
+       $0 delete ID         delete an existing gist
+       $0 describe ID DESC  update description of an existing gist
+       $0 private DESC      create and clone a new private gist
+       $0 public DESC       create and clone a new public gist
+
+$0 private and $0 public make an initial commit with a README containing
+the supplied description. You should replace this using git commit --amend
+followed by git commit --force.
+
+The git-config variables github.user and github.pass are read for the Github
+username and password.
+EOF
+exit 64;
