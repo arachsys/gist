@@ -15,15 +15,21 @@ my $password = `git config --get github.pass 2>/dev/null`
 chomp $username;
 chomp $password;
 
-sub clone($) {
-  die "Invalid gist ID '$_[0]'"
-    unless $_[0] =~ /^\d+$/ or $_[0] =~ /^[0-9a-f]{20}$/;
-  exec 'git', 'clone', "git\@gist.github.com:$_[0].git";
+sub clone($$) {
+  my ($id, $dir) = @_;
+  die "Invalid gist ID '$id'"
+    unless $id =~ /^\d+$/ or $id =~ /^[0-9a-f]{20}$/;
+
+  if (defined $dir) {
+    exec 'git', 'clone', "git\@gist.github.com:$id.git", $dir;
+  } else {
+    exec 'git', 'clone', "git\@gist.github.com:$id.git";
+  }
   die "Failed to clone gist\n";
 }
 
-sub create($$) {
-  my ($public, $description) = @_;
+sub create($$$) {
+  my ($public, $description, $dir) = @_;
 
   my $request = HTTP::Request->new(POST => $gistapi);
   $request->authorization_basic($username, $password);
@@ -41,7 +47,13 @@ sub create($$) {
   my $response = $agent->request($request);
   die "Failed to create gist\n" unless $response->is_success;
 
-  exec 'git', 'clone', decode_json($response->content)->{git_push_url};
+  my $url = decode_json($response->content)->{git_push_url};
+  print "Created gist at $url\n";
+  if (defined $dir) {
+    exec 'git', 'clone', $url, $dir;
+  } else {
+    exec 'git', 'clone', $url;
+  }
   die "Failed to clone gist\n";
 }
 
@@ -92,19 +104,23 @@ sub list() {
 }
 
 list if @ARGV == 0 or (@ARGV == 1 and $ARGV[0] =~ /^list|ls$/);
-clone $ARGV[1] if @ARGV == 2 and $ARGV[0] eq 'clone';
+clone $ARGV[1], undef if @ARGV == 2 and $ARGV[0] eq 'clone';
+clone $ARGV[1], $ARGV[2] if @ARGV == 3 and $ARGV[0] eq 'clone';
 describe $ARGV[1], $ARGV[2] if @ARGV == 3 and $ARGV[0] eq 'describe';
 destroy $ARGV[1] if @ARGV == 2 and $ARGV[0] =~ /^(delete|destroy|rm)$/;
-create $ARGV[0], $ARGV[1] if @ARGV == 2 and $ARGV[0] =~ /^(public|private)$/;
+create $ARGV[0], $ARGV[1], undef
+  if @ARGV == 2 and $ARGV[0] =~ /^(public|private)$/;
+create $ARGV[0], $ARGV[1], $ARGV[2]
+  if @ARGV == 3 and $ARGV[0] =~ /^(public|private)$/;
 
 $0 = basename $0;
 print STDERR <<EOF;
-Usage: $0 [list]            list all gists
-       $0 clone ID          clone an existing gist
-       $0 delete ID         delete an existing gist
-       $0 describe ID DESC  update description of an existing gist
-       $0 private DESC      create and clone a new private gist
-       $0 public DESC       create and clone a new public gist
+Usage: $0 [list]                list all gists
+       $0 clone ID [DIR]        clone an existing gist
+       $0 delete ID             delete an existing gist
+       $0 describe ID DESC      update description of an existing gist
+       $0 private DESC [DIR]    create and clone a new private gist
+       $0 public DESC [DIR]     create and clone a new public gist
 
 $0 private and $0 public make an initial commit with a README containing
 the supplied description. You should replace this using git commit --amend
