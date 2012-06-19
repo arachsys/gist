@@ -39,7 +39,7 @@ sub create($$$) {
     public => $public eq 'public' ? JSON::PP::true : JSON::PP::false,
     files => {
       README => {
-        content => $description
+        content => "$description\n"
       }
     }
   }));
