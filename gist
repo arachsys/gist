@@ -104,8 +104,9 @@ sub list() {
     length $a->{id} <=> length $b->{id} or $a->{id} cmp $b->{id}
   } @{decode_json $response->content};
 
+  my $width = 2 + length($gists[-1]->{id});
   foreach my $gist (@gists) {
-    printf "%-22s%s\n", $gist->{id}, $gist->{description};
+    printf "%-*s%s\n", $width, $gist->{id}, $gist->{description};
   }
   exit 0;
 }
