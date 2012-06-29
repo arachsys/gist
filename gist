@@ -23,7 +23,7 @@ sub clone($$) {
   if (defined $dir) {
     exec 'git', 'clone', "git\@gist.github.com:$id.git", $dir;
   } else {
-    exec 'git', 'clone', "git\@gist.github.com:$id.git";
+    exec 'git', 'clone', "git\@gist.github.com:$id.git", "gist-$id";
   }
   die "Failed to clone gist\n";
 }
@@ -48,14 +48,9 @@ sub create($$$) {
   die "Incorrect username/password\n" if $response->code == 401;
   die "Failed to create gist\n" unless $response->is_success;
 
-  my $url = decode_json($response->content)->{git_push_url};
-  print "Created gist at $url\n";
-  if (defined $dir) {
-    exec 'git', 'clone', $url, $dir;
-  } else {
-    exec 'git', 'clone', $url;
-  }
-  die "Failed to clone gist\n";
+  my $id = decode_json($response->content)->{id};
+  print "Created gist $id\n";
+  clone $id, $dir;
 }
 
 sub describe($$) {
